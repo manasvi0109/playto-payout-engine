@@ -39,11 +39,11 @@ if DATABASE_URL:
         'default': dj_database_url.config(
             default=DATABASE_URL,
             conn_max_age=600,
+            ssl_require=False,  # Internal Render connections don't need SSL
         )
     }
 else:
     raise Exception("DATABASE_URL environment variable is required in production!")
-
 # ──────────────────────────────────────────────
 # Security
 # ──────────────────────────────────────────────
