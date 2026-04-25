@@ -1,61 +1,71 @@
 /**
  * API Client — handles all communication with the Django backend.
- * 
- * Uses axios for HTTP requests.
- * In development, Vite proxy forwards /api/* to Django.
- * In production, we use the full URL.
+ *
+ * LOCAL DEV: Vite proxy forwards /api/* to Django (localhost:8000)
+ * PRODUCTION: Uses VITE_API_URL environment variable (Render backend URL)
  */
 
 import axios from 'axios';
 
-// Base URL for API requests
-// In dev: Vite proxy handles /api → Django
-// In prod: Use environment variable
+// Determine base URL
+// In production (Vercel): VITE_API_URL = "https://your-backend.onrender.com/api/v1"
+// In development: empty string (Vite proxy handles it)
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+console.log('[API Client] Base URL:', API_BASE);
 
 const apiClient = axios.create({
   baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 30000, // 30 second timeout (Render free tier cold starts are slow)
 });
+
+// Request interceptor — log outgoing requests in development
+apiClient.interceptors.request.use(
+  (config) => {
+    if (import.meta.env.DEV) {
+      console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor — handle common errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ECONNABORTED') {
+      console.error('[API] Request timed out — backend may be cold starting');
+    }
+    if (error.response?.status === 500) {
+      console.error('[API] Server error:', error.response.data);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ==========================================
 // MERCHANT APIs
 // ==========================================
 
-/**
- * Fetch all merchants.
- * GET /api/v1/merchants/
- */
 export const fetchMerchants = async () => {
   const response = await apiClient.get('/merchants/');
   return response.data;
 };
 
-/**
- * Fetch single merchant details.
- * GET /api/v1/merchants/{id}/
- */
 export const fetchMerchant = async (merchantId) => {
   const response = await apiClient.get(`/merchants/${merchantId}/`);
   return response.data;
 };
 
-/**
- * Fetch merchant balance.
- * GET /api/v1/merchants/{id}/balance/
- */
 export const fetchBalance = async (merchantId) => {
   const response = await apiClient.get(`/merchants/${merchantId}/balance/`);
   return response.data;
 };
 
-/**
- * Fetch merchant's bank accounts.
- * GET /api/v1/merchants/{id}/bank-accounts/
- */
 export const fetchBankAccounts = async (merchantId) => {
   const response = await apiClient.get(`/merchants/${merchantId}/bank-accounts/`);
   return response.data;
@@ -65,12 +75,10 @@ export const fetchBankAccounts = async (merchantId) => {
 // LEDGER APIs
 // ==========================================
 
-/**
- * Fetch merchant's ledger entries (paginated).
- * GET /api/v1/merchants/{id}/ledger/
- */
 export const fetchLedger = async (merchantId, page = 1) => {
-  const response = await apiClient.get(`/merchants/${merchantId}/ledger/?page=${page}`);
+  const response = await apiClient.get(
+    `/merchants/${merchantId}/ledger/?page=${page}`
+  );
   return response.data;
 };
 
@@ -78,13 +86,6 @@ export const fetchLedger = async (merchantId, page = 1) => {
 // PAYOUT APIs
 // ==========================================
 
-/**
- * Create a new payout request.
- * POST /api/v1/payouts/
- * 
- * @param {Object} data - { merchant_id, amount_paise, bank_account_id }
- * @param {string} idempotencyKey - UUID to prevent duplicate payouts
- */
 export const createPayout = async (data, idempotencyKey) => {
   const response = await apiClient.post('/payouts/', data, {
     headers: {
@@ -94,19 +95,13 @@ export const createPayout = async (data, idempotencyKey) => {
   return response.data;
 };
 
-/**
- * Fetch payouts for a merchant.
- * GET /api/v1/payouts/list/?merchant_id={id}
- */
 export const fetchPayouts = async (merchantId) => {
-  const response = await apiClient.get(`/payouts/list/?merchant_id=${merchantId}`);
+  const response = await apiClient.get(
+    `/payouts/list/?merchant_id=${merchantId}`
+  );
   return response.data;
 };
 
-/**
- * Fetch a single payout by ID.
- * GET /api/v1/payouts/{id}/
- */
 export const fetchPayout = async (payoutId) => {
   const response = await apiClient.get(`/payouts/${payoutId}/`);
   return response.data;
