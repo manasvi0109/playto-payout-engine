@@ -142,5 +142,5 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # Make Celery fail gracefully if broker is unavailable
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
+CELERY_TASK_EAGER_PROPAGATES = True  # Propagate exceptions in eager mode (helps debugging)

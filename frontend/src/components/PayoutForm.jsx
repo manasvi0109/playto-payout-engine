@@ -75,9 +75,16 @@ export default function PayoutForm({ merchantId, onPayoutCreated }) {
         idempotencyKey
       );
 
+      const statusMsg = response.status === 'completed' 
+        ? 'processed and completed' 
+        : response.status === 'failed'
+        ? 'processed but failed — funds returned'
+        : 'created and queued for processing';
+      
       setSuccess({
-        message: `Payout #${response.id} created successfully!`,
+        message: `Payout #${response.id} ${statusMsg}!`,
         amount: `₹${rupees.toFixed(2)}`,
+        status: response.status,
       });
       setAmountRupees('');
       setIdempotencyKey(generateUUID());
