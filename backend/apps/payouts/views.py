@@ -254,14 +254,17 @@ class PayoutCreateView(APIView):
             # ──────────────────────────────────────────────
             # STEP 6: Queue Celery task (OUTSIDE transaction)
             # ──────────────────────────────────────────────
-            # Why outside? If we queue inside the transaction and it
-            # rolls back, the Celery task would still try to process
-            # a payout that doesn't exist.
-            from .tasks import process_payout
-            process_payout.delay(payout.id)
-            
-            return Response(response_data, status=status.HTTP_201_CREATED)
-        
+            # Try to queue Celery task, but don't fail if Redis is unavailable
+            # On Render free tier, we might not have Celery workers
+            try:
+                from .tasks import process_payout
+                process_payout.delay(payout.id)
+                logger.info(f"Celery task queued for payout #{payout.id}")
+            except Exception as celery_error:
+                logger.warning(
+                    f"Could not queue Celery task for payout #{payout.id}: {celery_error}. "
+                    f"Payout will stay in 'pending' until Celery is available."
+                )
         except OperationalError as e:
             # ──────────────────────────────────────────────
             # NOWAIT lock failure

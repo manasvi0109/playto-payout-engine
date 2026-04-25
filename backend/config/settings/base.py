@@ -126,17 +126,21 @@ REST_FRAMEWORK = {
 # ============================================================
 CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']           # Only accept JSON serialized tasks
-CELERY_TASK_SERIALIZER = 'json'            # Serialize task data as JSON
-CELERY_RESULT_SERIALIZER = 'json'          # Serialize results as JSON
-CELERY_TIMEZONE = 'UTC'                    # Use UTC for task scheduling
-CELERY_TASK_TRACK_STARTED = True           # Track when tasks start
-CELERY_TASK_TIME_LIMIT = 120               # Kill task after 2 minutes
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 120
 
-# Celery Beat Schedule (periodic tasks)
+# Celery Beat Schedule — only if Redis is available
 CELERY_BEAT_SCHEDULE = {
     'retry-stuck-payouts': {
         'task': 'apps.payouts.tasks.retry_stuck_payouts',
-        'schedule': 30.0,  # Run every 30 seconds
+        'schedule': 30.0,
     },
 }
+
+# Make Celery fail gracefully if broker is unavailable
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
