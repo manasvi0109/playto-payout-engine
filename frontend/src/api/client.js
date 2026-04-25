@@ -1,47 +1,60 @@
-/**
- * API Client — handles all communication with the Django backend.
- *
- * LOCAL DEV: Vite proxy forwards /api/* to Django (localhost:8000)
- * PRODUCTION: Uses VITE_API_URL environment variable (Render backend URL)
- */
-
 import axios from 'axios';
 
-// Determine base URL
-// In production (Vercel): VITE_API_URL = "https://your-backend.onrender.com/api/v1"
-// In development: empty string (Vite proxy handles it)
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+// ═══════════════════════════════════════════════════
+// PRODUCTION BACKEND URL — HARDCODED AS FALLBACK
+// This guarantees the frontend ALWAYS knows where
+// the backend is, even if env variables are missing.
+// ═══════════════════════════════════════════════════
+const RENDER_BACKEND = 'https://playto-payout-engine-9smc.onrender.com/api/v1';
 
-console.log('[API Client] Base URL:', API_BASE);
+function getBaseUrl() {
+  // Local development: use Vite proxy
+  if (import.meta.env.DEV) {
+    console.log('[API] Running in DEV mode — using Vite proxy');
+    return '/api/v1';
+  }
+
+  // Production: use env variable or hardcoded fallback
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.startsWith('http')) {
+    // Remove trailing slash if present
+    const cleanUrl = envUrl.endsWith('/') ? envUrl.slice(0, -1) : envUrl;
+    console.log('[API] Using VITE_API_URL:', cleanUrl);
+    return cleanUrl;
+  }
+
+  console.log('[API] Using hardcoded RENDER_BACKEND:', RENDER_BACKEND);
+  return RENDER_BACKEND;
+}
+
+const API_BASE = getBaseUrl();
+console.log('[API] Final Base URL:', API_BASE);
 
 const apiClient = axios.create({
   baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout (Render free tier cold starts are slow)
+  timeout: 60000,
 });
 
-// Request interceptor — log outgoing requests in development
-apiClient.interceptors.request.use(
-  (config) => {
-    if (import.meta.env.DEV) {
-      console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// Log every request in development
+apiClient.interceptors.request.use((config) => {
+  const fullUrl = `${config.baseURL}${config.url}`;
+  console.log(`[API] ${config.method?.toUpperCase()} ${fullUrl}`);
+  return config;
+});
 
-// Response interceptor — handle common errors
+// Handle errors
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.code === 'ECONNABORTED') {
-      console.error('[API] Request timed out — backend may be cold starting');
-    }
-    if (error.response?.status === 500) {
-      console.error('[API] Server error:', error.response.data);
+      console.error('[API] Timeout — Render backend may be cold starting');
+    } else if (!error.response) {
+      console.error('[API] Network error — check if backend is running');
+    } else {
+      console.error(`[API] Error ${error.response.status}:`, error.response.data);
     }
     return Promise.reject(error);
   }
@@ -50,7 +63,6 @@ apiClient.interceptors.response.use(
 // ==========================================
 // MERCHANT APIs
 // ==========================================
-
 export const fetchMerchants = async () => {
   const response = await apiClient.get('/merchants/');
   return response.data;
@@ -74,31 +86,23 @@ export const fetchBankAccounts = async (merchantId) => {
 // ==========================================
 // LEDGER APIs
 // ==========================================
-
 export const fetchLedger = async (merchantId, page = 1) => {
-  const response = await apiClient.get(
-    `/merchants/${merchantId}/ledger/?page=${page}`
-  );
+  const response = await apiClient.get(`/merchants/${merchantId}/ledger/?page=${page}`);
   return response.data;
 };
 
 // ==========================================
 // PAYOUT APIs
 // ==========================================
-
 export const createPayout = async (data, idempotencyKey) => {
   const response = await apiClient.post('/payouts/', data, {
-    headers: {
-      'Idempotency-Key': idempotencyKey,
-    },
+    headers: { 'Idempotency-Key': idempotencyKey },
   });
   return response.data;
 };
 
 export const fetchPayouts = async (merchantId) => {
-  const response = await apiClient.get(
-    `/payouts/list/?merchant_id=${merchantId}`
-  );
+  const response = await apiClient.get(`/payouts/list/?merchant_id=${merchantId}`);
   return response.data;
 };
 

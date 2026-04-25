@@ -1,8 +1,3 @@
-/**
- * ConnectionStatus — Shows banner only during cold start.
- * Disappears the moment ANY successful API call is made.
- */
-
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -11,64 +6,63 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/solid';
 
+const RENDER_BACKEND = 'https://playto-payout-engine-9smc.onrender.com/api/v1';
+
+function getCheckUrl() {
+  if (import.meta.env.DEV) return '/api/v1';
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.startsWith('http')) {
+    return envUrl.endsWith('/') ? envUrl.slice(0, -1) : envUrl;
+  }
+  return RENDER_BACKEND;
+}
+
 export default function ConnectionStatus() {
-  const [status, setStatus] = useState('checking'); // checking | connected | error
+  const [status, setStatus] = useState('checking');
   const [retryCount, setRetryCount] = useState(0);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // If already connected or dismissed, do nothing
     if (status === 'connected' || dismissed) return;
 
     const checkConnection = async () => {
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || '/api/v1';
-        
-        // Use a simple fetch with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const url = `${getCheckUrl()}/merchants/`;
         
-        const response = await fetch(`${baseUrl}/merchants/`, {
-          signal: controller.signal,
-        });
+        console.log('[ConnectionStatus] Checking:', url);
         
+        const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
         
-        // ANY response from backend means it's alive (even 500)
+        console.log('[ConnectionStatus] Response status:', response.status);
+        
+        // Any response from our backend means it's alive
         if (response.status < 502) {
           setStatus('connected');
-          // Auto-hide after showing "connected" briefly
-          setTimeout(() => setDismissed(true), 2000);
+          setTimeout(() => setDismissed(true), 1500);
         } else {
           throw new Error(`HTTP ${response.status}`);
         }
       } catch (err) {
-        // Only show error if it's a network/timeout error
-        if (err.name === 'AbortError' || err.message.includes('fetch')) {
-          setStatus('error');
-          // Retry after 5 seconds
-          setTimeout(() => {
-            setRetryCount((prev) => prev + 1);
-            setStatus('checking');
-          }, 5000);
-        } else {
-          // Backend responded but with an error — it's still alive
-          setStatus('connected');
-          setTimeout(() => setDismissed(true), 2000);
-        }
+        console.log('[ConnectionStatus] Error:', err.message);
+        setStatus('error');
+        setTimeout(() => {
+          setRetryCount((prev) => prev + 1);
+          setStatus('checking');
+        }, 5000);
       }
     };
 
     checkConnection();
   }, [status, retryCount, dismissed]);
 
-  // Don't render anything if connected and dismissed, or if first check succeeds fast
   if (dismissed) return null;
   if (status === 'connected' && retryCount === 0) return null;
 
   return (
     <AnimatePresence>
-      {/* Error state — backend not reachable */}
       {status === 'error' && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -78,27 +72,15 @@ export default function ConnectionStatus() {
         >
           <div className="flex items-center gap-3 px-5 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl backdrop-blur-xl shadow-2xl">
             <ExclamationTriangleIcon className="h-5 w-5 text-amber-400 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-amber-300 font-medium">
-                Backend is waking up...
-              </p>
-              <p className="text-xs text-amber-400/60">
-                Free tier cold start — retrying (attempt {retryCount + 1})
-              </p>
+            <div className="flex-1">
+              <p className="text-sm text-amber-300 font-medium">Waking up backend...</p>
+              <p className="text-xs text-amber-400/60">Render free tier — retry #{retryCount + 1}</p>
             </div>
-            <ArrowPathIcon className="h-4 w-4 text-amber-400 animate-spin flex-shrink-0" />
-            {/* Dismiss button */}
-            <button
-              onClick={() => setDismissed(true)}
-              className="text-amber-400/60 hover:text-amber-300 text-xs ml-1"
-            >
-              ✕
-            </button>
+            <ArrowPathIcon className="h-4 w-4 text-amber-400 animate-spin" />
+            <button onClick={() => setDismissed(true)} className="text-amber-400/40 hover:text-amber-300 text-lg">×</button>
           </div>
         </motion.div>
       )}
-
-      {/* Checking state (retry in progress) */}
       {status === 'checking' && retryCount > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -107,15 +89,11 @@ export default function ConnectionStatus() {
           className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full mx-4"
         >
           <div className="flex items-center gap-3 px-5 py-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl backdrop-blur-xl shadow-2xl">
-            <ArrowPathIcon className="h-5 w-5 text-blue-400 animate-spin flex-shrink-0" />
-            <p className="text-sm text-blue-300 font-medium">
-              Reconnecting to backend...
-            </p>
+            <ArrowPathIcon className="h-5 w-5 text-blue-400 animate-spin" />
+            <p className="text-sm text-blue-300">Reconnecting...</p>
           </div>
         </motion.div>
       )}
-
-      {/* Connected state — brief success flash */}
       {status === 'connected' && retryCount > 0 && !dismissed && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -124,10 +102,8 @@ export default function ConnectionStatus() {
           className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full mx-4"
         >
           <div className="flex items-center gap-3 px-5 py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl backdrop-blur-xl shadow-2xl">
-            <CheckCircleIcon className="h-5 w-5 text-emerald-400 flex-shrink-0" />
-            <p className="text-sm text-emerald-300 font-medium">
-              Connected to backend!
-            </p>
+            <CheckCircleIcon className="h-5 w-5 text-emerald-400" />
+            <p className="text-sm text-emerald-300">Connected!</p>
           </div>
         </motion.div>
       )}
