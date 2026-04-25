@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 # .resolve() = absolute path
 # .parent = config/settings/ → .parent = config/ → .parent = backend/
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+import sys
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 # Load .env file from backend/ directory
 load_dotenv(BASE_DIR / '.env')
