@@ -44,10 +44,10 @@ class Payout(models.Model):
     
     # Strict state machine: which transitions are legal
     ALLOWED_TRANSITIONS = {
-        'pending': ['processing'],
-        'processing': ['completed', 'failed'],
-        'completed': [],  # Terminal state — no transitions out
-        'failed': [],     # Terminal state — no transitions out
+    'pending': ['processing'],
+    'processing': ['completed', 'failed'],
+    'completed': [],  # Terminal state
+    'failed': [],     # Terminal state
     }
     
     merchant = models.ForeignKey(
