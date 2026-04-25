@@ -1,0 +1,88 @@
+# Render Blueprint — defines all services for one-click deploy
+# https://render.com/docs/blueprint-spec
+
+databases:
+  - name: playto-db
+    plan: free
+    databaseName: playto_payout
+    user: playto_user
+
+services:
+  # Django Backend
+  - type: web
+    name: playto-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: playto-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: playto-redis
+          type: redis
+          property: connectionString
+
+  # Celery Worker
+  - type: worker
+    name: playto-celery-worker
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A config worker --loglevel=info --concurrency=2"
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: SECRET_KEY
+        fromService:
+          name: playto-backend
+          type: web
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: playto-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: playto-redis
+          type: redis
+          property: connectionString
+
+  # Celery Beat
+  - type: worker
+    name: playto-celery-beat
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A config beat --loglevel=info"
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: SECRET_KEY
+        fromService:
+          name: playto-backend
+          type: web
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: playto-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: playto-redis
+          type: redis
+          property: connectionString
